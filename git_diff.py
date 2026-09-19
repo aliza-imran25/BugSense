@@ -13,7 +13,18 @@ SOURCE_GLOBS = (
     ":(glob)**/*.cxx",
     ":(glob)**/*.hpp",
     ":(glob)**/*.js",
+    ":(glob)**/*.jsx",
+    ":(glob)**/*.mjs",
     ":(glob)**/*.ts",
+    ":(glob)**/*.tsx",
+    ":(glob)**/*.go",
+    ":(glob)**/*.rs",
+    ":(glob)**/*.cs",
+    ":(glob)**/*.rb",
+    ":(glob)**/*.php",
+    ":(glob)**/*.sql",
+    ":(glob)**/*.kt",
+    ":(glob)**/*.swift",
 )
 
 

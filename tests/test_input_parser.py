@@ -16,14 +16,14 @@ def test_filename_extension_wins_over_hints():
 
 
 def test_unknown_language_without_hints():
-    parsed = InputParser().parse("SELECT 1;")
+    parsed = InputParser().parse("hello world")
     assert parsed["language"] == "unknown"
 
 
 def test_truncates_long_input_and_records_warning():
-    code = "\n".join(f"x = {i}" for i in range(150))
+    code = "\n".join(f"x = {i}" for i in range(InputParser.MAX_LINES + 50))
     parsed = InputParser().parse(code)
-    assert parsed["lines"] == 100
+    assert parsed["lines"] == InputParser.MAX_LINES
     assert any("Truncated" in w for w in parsed["warnings"])
 
 

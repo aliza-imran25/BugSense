@@ -4,6 +4,7 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from agent import AgentError, BugSenseAgent
+from code_compare import pair_sources, side_by_side_html
 from git_diff import collect_git_diff
 from input_parser import InputParser
 from output_formatter import OutputFormatter
@@ -52,10 +53,34 @@ def analyze_parsed(parsed: dict, spinner_label: str) -> None:
         with st.spinner(spinner_label):
             response = get_agent().analyze(parsed)
         render_warnings(parsed)
-        st.markdown(get_formatter().to_markdown(response))
+        render_result(parsed, response)
     except AgentError as exc:
         render_warnings(parsed)
         st.error(str(exc))
+
+
+def render_result(parsed: dict, response: str) -> None:
+    formatter = get_formatter()
+    sections = formatter.parse_sections(response)
+    if not any(sections.values()):
+        st.markdown(response)
+        return
+
+    st.markdown(f"### Bug Type\n\n{sections['Bug Type'] or '*(not found)*'}")
+    st.markdown(f"### Root Cause\n\n{sections['Root Cause'] or '*(not found)*'}")
+    st.markdown("### Corrected Code")
+
+    pairs = pair_sources(parsed, sections.get("Corrected Code") or "")
+    if not pairs:
+        st.markdown(sections.get("Corrected Code") or "*(not found)*")
+        return
+
+    for label, original, corrected in pairs:
+        if label:
+            st.caption(label)
+        st.html(side_by_side_html(original, corrected))
+        with st.expander("Copy full corrected file", expanded=False):
+            st.code(corrected)
 
 
 def decode_upload(uploaded_file) -> str | None:
@@ -68,8 +93,8 @@ def decode_upload(uploaded_file) -> str | None:
 
 if not BugSenseAgent.api_key_configured():
     st.error(
-        "GEMINI_API_KEY is not set. Copy `.env.example` to `.env` in the project root, "
-        "paste your key after `GEMINI_API_KEY=`, then restart the app."
+        "GEMINI_API_KEY is not set. Locally: copy `.env.example` to `.env` and add your key. "
+        "On Streamlit Cloud: App settings → Secrets → `GEMINI_API_KEY = \"...\"`."
     )
     st.info("Get a key at https://aistudio.google.com/apikey")
     st.stop()
@@ -83,7 +108,7 @@ with tab1:
         "Paste code here:",
         height=300,
         placeholder="def my_function():...",
-        help=f"Inputs longer than {parser_limit} lines are truncated.",
+        help=f"Inputs longer than {parser_limit} lines are chunked by function/class, then truncated if needed.",
     )
     error_msg = st.text_input(
         "Error message (optional):",
@@ -116,7 +141,7 @@ with tab2:
     uploaded_files = st.file_uploader(
         "Select files",
         accept_multiple_files="directory" if upload_mode else True,
-        type=["py", "java", "c", "h", "cpp", "cc", "js", "ts"],
+        type=["py", "java", "c", "h", "cpp", "cc", "cxx", "hpp", "js", "jsx", "mjs", "ts", "tsx", "go", "rs", "cs", "rb", "php", "sql", "kt", "swift"],
     )
     shared_error = st.text_input(
         "Error message (optional):",

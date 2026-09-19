@@ -12,6 +12,27 @@ load_dotenv()
 RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
 
 
+def _apply_hosted_secrets() -> None:
+    """Copy Streamlit Cloud / Hugging Face secrets into os.environ for genai.Client()."""
+    try:
+        import streamlit as st
+    except ImportError:
+        return
+    try:
+        secrets = st.secrets
+    except Exception:
+        return
+    for name in ("GEMINI_API_KEY", "GEMINI_MODEL"):
+        if os.getenv(name, "").strip():
+            continue
+        try:
+            value = secrets.get(name)
+        except Exception:
+            value = None
+        if value:
+            os.environ[name] = str(value).strip()
+
+
 class AgentError(Exception):
     """Raised when BugSense cannot complete an analysis request."""
 
@@ -19,6 +40,7 @@ class AgentError(Exception):
 class BugSenseAgent:
     def __init__(self, model_id: str | None = None, retries: int = 3):
         self.engine = PromptEngine()
+        _apply_hosted_secrets()
         self.model_id = model_id or os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
         self.retries = retries
         self._client = None
@@ -26,12 +48,13 @@ class BugSenseAgent:
     @staticmethod
     def api_key_configured() -> bool:
         load_dotenv()
+        _apply_hosted_secrets()
         return bool(os.getenv("GEMINI_API_KEY", "").strip())
 
     def _client_or_raise(self):
         if not self.api_key_configured():
             raise AgentError(
-                "GEMINI_API_KEY is not set. Copy .env.example to .env and add your key."
+                "GEMINI_API_KEY is not set. Copy .env.example to .env, or set it as a host secret."
             )
         if self._client is None:
             self._client = genai.Client()

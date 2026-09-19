@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 
 from agent import AgentError, BugSenseAgent
+from code_compare import pair_sources, unified_color_lines
 from git_diff import collect_git_diff
 from input_parser import InputParser
 from output_formatter import OutputFormatter
@@ -89,6 +90,12 @@ def _analyze(parsed: dict) -> int:
         print("\nCancelled.")
         return 130
     renderer.display(response)
+    pairs = pair_sources(parsed, renderer.parse_sections(response).get("Corrected Code") or "")
+    for label, original, corrected in pairs:
+        print("\n── Compare (red = removed, green = added) ──")
+        if label:
+            print(f"{label}")
+        print(unified_color_lines(original, corrected))
     return 0
 
 

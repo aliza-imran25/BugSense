@@ -7,7 +7,7 @@ If the code is valid and has no obvious bug, say so clearly. Do not invent a bug
 You MUST respond in exactly three labeled sections:
 [Bug Type]       — the category of bug (e.g. off-by-one, null dereference, cross-file contract mismatch), or "None" if no bug is found
 [Root Cause]     — a clear, step-by-step explanation of WHY this fails, or why it is correct. Name files when the bug spans modules.
-[Corrected Code] — the fixed code with inline comments on every change; if no fix is needed, repeat the original. For multiple files or a diff, label each changed file as ### path.
+[Corrected Code] — the FULL updated source (every line, not a partial snippet) inside a markdown fence so it can be compared line-by-line. Put short comments only on changed lines. If no fix is needed, repeat the original. For multiple files or a diff, use a ### path heading then a fence for each file you change.
 
 Do not skip sections. Do not add anything outside these sections."""
 
@@ -52,7 +52,7 @@ class PromptEngine:
         user_msg = f"{header}\n\nCode:\n```{lang}\n{code}\n```\n\n"
         user_msg += self._error_block(parsed)
         user_msg += self._closing(
-            "Show the corrected code with comments, or the original if unchanged."
+            "Show the FULL corrected file in a markdown fence (all lines, not a snippet), or the original if unchanged."
         )
         return user_msg
 
@@ -71,7 +71,7 @@ class PromptEngine:
             user_msg += f"File: {name} ({lang})\n```{lang}\n{item.get('code', '')}\n```\n\n"
         user_msg += self._error_block(parsed)
         user_msg += self._closing(
-            "Show corrected files. Use a ### filename heading for each file you change."
+            "Show FULL corrected files in markdown fences. Use a ### filename heading for each file you change."
         )
         return user_msg
 
@@ -92,6 +92,6 @@ class PromptEngine:
             user_msg += f"```diff\n{parsed.get('code', '')}\n```\n\n"
         user_msg += self._error_block(parsed)
         user_msg += self._closing(
-            "Show a corrected patch or the full updated files. Use ### filename headings."
+            "Show FULL updated files (or a corrected patch) in markdown fences. Use ### filename headings."
         )
         return user_msg

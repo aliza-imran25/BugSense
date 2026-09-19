@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 SOURCE_EXTENSIONS = {
@@ -10,24 +11,48 @@ SOURCE_EXTENSIONS = {
     ".cxx": "cpp",
     ".hpp": "cpp",
     ".js": "javascript",
+    ".jsx": "javascript",
+    ".mjs": "javascript",
     ".ts": "typescript",
+    ".tsx": "typescript",
+    ".go": "go",
+    ".rs": "rust",
+    ".cs": "csharp",
+    ".rb": "ruby",
+    ".php": "php",
+    ".sql": "sql",
+    ".kt": "kotlin",
+    ".swift": "swift",
 }
+
+_SECRET_RE = re.compile(
+    r"(?i)((?:api[_-]?key|secret|token|password|passwd|authorization)\s*[=:]\s*)(['\"]?)([^\s'\"]{8,})(\2)"
+)
+_CHUNK_START = re.compile(
+    r"^(def |async def |class |function |export (?:default )?function |export class |"
+    r"pub (?:async )?fn |fn |func )"
+)
 
 
 class InputParser:
     """Normalize source input before it is sent to the model."""
 
     LANG_HINTS = {
-        "python": (r"def ", r"import ", r"print("),
-        "java": (r"public class", r"System.out"),
-        "c": (r"#include", r"printf(", r"int main"),
+        "python": ("def ", "import ", "print("),
+        "java": ("public class", "System.out"),
+        "c": ("#include", "printf(", "int main"),
+        "javascript": ("function ", "const ", "console.log"),
+        "typescript": ("interface ", "type ", ": string"),
+        "go": ("package ", "func ", "fmt."),
+        "sql": ("SELECT ", "CREATE TABLE", "INSERT INTO"),
+        "rust": ("fn ", "let mut ", "impl "),
     }
     EXTENSIONS = SOURCE_EXTENSIONS
-    MAX_LINES = 100
-    MAX_BYTES = 200_000
-    MAX_FILES = 12
-    MAX_TOTAL_LINES = 400
-    MAX_DIFF_LINES = 500
+    MAX_LINES = 400
+    MAX_BYTES = 500_000
+    MAX_FILES = 20
+    MAX_TOTAL_LINES = 1600
+    MAX_DIFF_LINES = 1500
 
     def detect_language(self, code: str, filename: str = "") -> str:
         suffix = Path(filename).suffix.lower()
@@ -40,7 +65,7 @@ class InputParser:
         return "unknown"
 
     def _truncate_text(self, raw: str, max_lines: int, warnings: list[str], label: str) -> str:
-        text = raw or ""
+        text = redact_secrets(raw or "", warnings)
         if len(text.encode("utf-8")) > self.MAX_BYTES:
             warnings.append(f"{label} exceeds {self.MAX_BYTES} bytes; truncated.")
             text = text.encode("utf-8")[: self.MAX_BYTES].decode("utf-8", errors="ignore")
@@ -53,7 +78,18 @@ class InputParser:
 
     def parse(self, code: str, error: str = "", filename: str = "") -> dict:
         warnings: list[str] = []
-        clean_code = self._truncate_text(code, self.MAX_LINES, warnings, filename or "Input")
+        redacted = redact_secrets(code or "", warnings)
+        chunks = chunk_by_top_level(redacted, self.MAX_LINES)
+        if len(chunks) > 1:
+            warnings.append(
+                f"{filename or 'Input'} was split into {len(chunks)} function/class chunks."
+            )
+            stem = filename or "snippet"
+            items = [(f"{stem}#part{i + 1}", chunk) for i, chunk in enumerate(chunks)]
+            parsed = self.parse_files(items, error)
+            parsed["warnings"] = warnings + parsed.get("warnings", [])
+            return parsed
+        clean_code = self._truncate_text(redacted, self.MAX_LINES, warnings, filename or "Input")
         language = self.detect_language(clean_code, filename)
         return {
             "mode": "snippet",
@@ -232,3 +268,49 @@ def _filename_from_diff_chunk(chunk: str) -> str:
             if len(parts) >= 4:
                 return parts[3].removeprefix("b/")
     return ""
+
+
+def redact_secrets(text: str, warnings: list[str] | None = None) -> str:
+    """Mask common key/token assignments before the code is sent to the model."""
+
+    def _replace(match: re.Match) -> str:
+        return f"{match.group(1)}{match.group(2)}***REDACTED***{match.group(4)}"
+
+    redacted, count = _SECRET_RE.subn(_replace, text or "")
+    if count and warnings is not None:
+        warnings.append(f"Redacted {count} possible secret value(s) before sending to the API.")
+    return redacted
+
+
+def chunk_by_top_level(code: str, max_lines: int) -> list[str]:
+    """Split oversized files on top-level defs/classes so they can be analyzed in parts."""
+    lines = (code or "").splitlines()
+    if len(lines) <= max_lines:
+        return ["\n".join(lines)] if lines else [code or ""]
+
+    starts = [index for index, line in enumerate(lines) if _CHUNK_START.match(line)]
+    if len(starts) < 2:
+        return ["\n".join(lines)]
+
+    if starts[0] != 0:
+        starts = [0] + starts
+
+    raw_chunks: list[list[str]] = []
+    for index, start in enumerate(starts):
+        end = starts[index + 1] if index + 1 < len(starts) else len(lines)
+        raw_chunks.append(lines[start:end])
+
+    packed: list[str] = []
+    current: list[str] = []
+    for piece in raw_chunks:
+        if current and len(current) + len(piece) > max_lines:
+            packed.append("\n".join(current))
+            current = list(piece)
+            if len(current) > max_lines:
+                packed.append("\n".join(current[:max_lines]))
+                current = []
+        else:
+            current.extend(piece)
+    if current:
+        packed.append("\n".join(current[:max_lines]))
+    return packed or ["\n".join(lines[:max_lines])]
