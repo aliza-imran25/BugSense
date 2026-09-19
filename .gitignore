@@ -5,7 +5,8 @@ build/
 dist/
 wheels/
 *.egg-info
+.pytest_cache/
 
-# Virtual environments
+# Virtual environments and secrets
 .venv
 .env
