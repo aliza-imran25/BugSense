@@ -1,55 +1,69 @@
-🐛 BugSense — AI-Powered Bug Analyst
-BugSense is an intelligent debugging companion designed to help developers and students move beyond simple "fix-it" solutions. Built for the modern web, BugSense analyzes code snippets or entire project directories to identify bug types, explain root causes, and provide optimized, corrected code with educational commentary.
+# BugSense
 
-🚀 Features
-Multi-Input Modes: Paste raw code snippets or upload entire files and project folders.
+BugSense is a small debugging companion for students and developers. It sends a code snippet (or uploaded source files) to Gemini and returns three sections:
 
-Deep Semantic Analysis: Powered by the Gemini 3 Flash model to trace logical, syntax, and runtime errors.
+- **Bug Type** — category of the problem, or `None` if the code looks fine
+- **Root Cause** — a step-by-step explanation
+- **Corrected Code** — a fix with comments on each change
 
-Educational Output: Instead of just providing a fix, it breaks down the analysis into:
+It is a thin, educational wrapper around the Gemini API, not a local static analyzer. Submitted code is sent to Google.
 
-[Bug Type]: Categorizes the error (e.g., Logic, Precedence, Type).
+## Requirements
 
-[Root Cause]: A step-by-step trace of why the failure occurs.
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/)
+- A [Gemini API key](https://aistudio.google.com/apikey)
 
-[Corrected Code]: The fixed solution with inline explanations.
+## Setup
 
-Modern Python Stack: Built using uv for lightning-fast dependency management and Streamlit for a sleek web interface.
+```bash
+git clone https://github.com/aliza-imran25/BugSense.git
+cd BugSense
+uv sync --group dev
+cp .env.example .env
+```
 
-🛠️ Tech Stack
-Language: Python 3.12+
+Edit `.env` and set `GEMINI_API_KEY`.
 
-Framework: Streamlit
+## Usage
 
-AI Engine: Google GenAI SDK (Gemini 3 Flash)
+Web UI:
 
-Package Manager: uv
-
-📥 Installation
-Ensure you have uv installed, then clone the repository and set up the environment:
-
-Bash
-# Clone the repo
-git clone https://github.com/your-username/bugsense.git
-cd bugsense
-
-# Install dependencies and create venv
-uv sync
-
-# Set up your environment variables in a .env file
-echo "GEMINI_API_KEY=your_api_key_here" > .env
-🖥️ Usage
-Run the web application locally:
-
-Bash
+```bash
 uv run streamlit run streamlit_app.py
-📂 Project Structure
-streamlit_app.py: The web interface and file upload logic.
+```
 
-agent.py: Handles communication with the Gemini API and retry logic.
+CLI — paste code, then type `END`:
 
-prompt_engine.py: Defines the persona and structural constraints for the AI.
+```bash
+uv run python main.py
+```
 
-input_parser.py: Sanitizes code inputs and detects programming languages.
+CLI — analyze a file:
 
-output_formatter.py: (Legacy) CLI formatting for terminal-based runs.
+```bash
+uv run python main.py path/to/buggy.py -e "TypeError: ..."
+```
+
+The parser keeps the first 100 lines (and at most 200 KB) so prompts stay bounded.
+
+## Project layout
+
+| File | Role |
+| --- | --- |
+| `streamlit_app.py` | Web UI (paste or upload) |
+| `main.py` | Command-line entry point |
+| `agent.py` | Gemini client, retries, API key checks |
+| `prompt_engine.py` | System and user prompt templates |
+| `input_parser.py` | Language detection, truncation, warnings |
+| `output_formatter.py` | Parses `[Bug Type]` / `[Root Cause]` / `[Corrected Code]` |
+
+## Tests
+
+```bash
+uv run pytest
+```
+
+## License
+
+MIT. See [LICENSE](LICENSE).
