@@ -1,18 +1,29 @@
 # BugSense
 
-BugSense is a small debugging companion for students and developers. It sends a code snippet (or uploaded source files) to Gemini and returns three sections:
+BugSense is a small debugging companion for students and developers. It sends a snippet, a set of project files, or a git diff to Gemini and returns:
 
 - **Bug Type** — category of the problem, or `None` if the code looks fine
-- **Root Cause** — a step-by-step explanation
-- **Corrected Code** — a fix with comments on each change
+- **Root Cause** — a step-by-step explanation (including cross-file causes)
+- **Corrected Code** — a fix with comments; multi-file/diff results are labeled by path
 
-It is a thin, educational wrapper around the Gemini API, not a local static analyzer. Submitted code is sent to Google.
+Submitted code is sent to Google. This is not a local static analyzer.
 
-## Requirements
+## API key (required)
 
-- Python 3.12+
-- [uv](https://docs.astral.sh/uv/)
-- A [Gemini API key](https://aistudio.google.com/apikey)
+1. Create a key at [Google AI Studio](https://aistudio.google.com/apikey).
+2. In the **project root** (same folder as `streamlit_app.py` and `main.py`):
+
+```bash
+cp .env.example .env
+```
+
+3. Open `.env` and replace the placeholder:
+
+```
+GEMINI_API_KEY=paste_your_key_here
+```
+
+Do not commit `.env`. Optional: set `GEMINI_MODEL` in the same file. Restart Streamlit after changing the key.
 
 ## Setup
 
@@ -23,8 +34,6 @@ uv sync --group dev
 cp .env.example .env
 ```
 
-Edit `.env` and set `GEMINI_API_KEY`.
-
 ## Usage
 
 Web UI:
@@ -33,29 +42,44 @@ Web UI:
 uv run streamlit run streamlit_app.py
 ```
 
-CLI — paste code, then type `END`:
+- **Paste Code** — one snippet
+- **Multi-file** — upload several files or a folder; leave “Analyze together” on to catch caller/callee bugs
+- **Diff** — paste/upload a unified patch, or run `git diff` against a local repo path
 
-```bash
-uv run python main.py
-```
-
-CLI — analyze a file:
+CLI — one file:
 
 ```bash
 uv run python main.py path/to/buggy.py -e "TypeError: ..."
 ```
 
-The parser keeps the first 100 lines (and at most 200 KB) so prompts stay bounded.
+CLI — several files together (cross-file analysis):
+
+```bash
+uv run python main.py src/util.py src/app.py -e "AssertionError"
+uv run python main.py --per-file src/util.py src/app.py
+```
+
+CLI — git diff (real-bug workflow):
+
+```bash
+uv run python main.py --diff
+uv run python main.py --diff main --repo /path/to/project
+uv run python main.py --diff --staged
+uv run python main.py --patch changes.diff
+```
+
+Snippets are capped at 100 lines per file (400 lines total for a bundle, 500 for a diff, 12 files).
 
 ## Project layout
 
 | File | Role |
 | --- | --- |
-| `streamlit_app.py` | Web UI (paste or upload) |
+| `streamlit_app.py` | Web UI (snippet, multi-file, diff) |
 | `main.py` | Command-line entry point |
 | `agent.py` | Gemini client, retries, API key checks |
 | `prompt_engine.py` | System and user prompt templates |
-| `input_parser.py` | Language detection, truncation, warnings |
+| `input_parser.py` | Language detection, bundles, unified diffs |
+| `git_diff.py` | Collects `git diff` from a local repo |
 | `output_formatter.py` | Parses `[Bug Type]` / `[Root Cause]` / `[Corrected Code]` |
 
 ## Tests
